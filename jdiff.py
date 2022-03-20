@@ -70,6 +70,7 @@ class DiffOps:
 
 def dict_diff(jsona: dict, jsonb: dict, indent: int = 0) -> DiffOps:
     """ recursively find differences between two dictionaries"""
+    print(f"a-{type(jsona)} b-{type(jsonb)}")
     a_keys = set(jsona.keys())
     b_keys = set(jsonb.keys())
 
@@ -87,15 +88,17 @@ def dict_diff(jsona: dict, jsonb: dict, indent: int = 0) -> DiffOps:
 
     intersection_keys = sorted(a_keys.intersection(b_keys))
     for k in intersection_keys:
-        t = type(jsona[k])
         if isinstance(jsona[k], dict):
-            subops = dict_diff(jsona[k], jsonb[k], indent+4)
-            if len(subops) > 0:
-                diffops.add_sub_ops(k, subops)
-
+            if isinstance(jsonb[k], dict):
+                subops = dict_diff(jsona[k], jsonb[k], indent+4)
+                if len(subops) > 0:
+                    diffops.add_sub_ops(k, subops)
+            else: # b is a scalar value
+                diffops.op_l2r(k, jsona[k])
+                diffops.op_r2l(k, jsonb[k])
         elif jsona[k] != jsonb[k]:
-            diffops.op_l2r((k, jsona[k]))
-            diffops.op_r2l((k, jsonb[k]))
+            diffops.op_l2r(k, jsona[k])
+            diffops.op_r2l(k, jsonb[k])
 
     return diffops
 
