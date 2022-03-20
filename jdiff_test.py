@@ -16,10 +16,51 @@ class TestZeroDepthDicts(unittest.TestCase):
 
 
         diff = jd.dict_diff(jsona, jsonb)
+        sys.stdout.write("\n")
         diff.to_file(sys.stdout)
+        sys.stdout.write("\n")
         self.assertEqual(len(diff), 1)
         self.assertEqual(diff.ops, deque([('>', 0, 'two', 2)]))
 
+    def test_base_2(self):
+        jsona = {"one": 1}
+        jsonb = {"one": 1, "two": 2, "three": 3}
+
+
+        diff = jd.dict_diff(jsona, jsonb)
+        sys.stdout.write("\n")
+        diff.to_file(sys.stdout)
+        self.assertEqual(len(diff), 2)
+        self.assertEqual(diff.ops, deque([
+            ('>', 0, 'three', 3),
+            ('>', 0, 'two', 2)
+            ]))
+
+    def test_subops_1(self):
+        jsona = {"one": 1}
+        jsonb = {"one": 1, "two": 2, "three": { "four": 4}}
+
+
+        diff = jd.dict_diff(jsona, jsonb)
+        sys.stdout.write("\n")
+        diff.to_file(sys.stdout)
+        self.assertEqual(len(diff), 2)
+        self.assertEqual(diff.ops, deque([
+            ('>', 0, 'three', {'four': 4}), 
+            ('>', 0, 'two', 2)
+            ]))
+
+    def test_subops_1(self):
+        jsona = {"one": 1, "two": 2, "three": { "four": 4}}
+        jsonb = {"one": 1, "two": 2, "three": { "four": 4, "five": 5}}
+
+
+        diff = jd.dict_diff(jsona, jsonb)
+        sys.stdout.write("\n")
+        diff.to_file(sys.stdout)
+        self.assertEqual(diff.ops, deque([
+            ('D', 0, 'three', deque([('>', 4, 'five',  5)])), 
+            ]))
 
 if __name__ == '__main__':
     unittest.main()

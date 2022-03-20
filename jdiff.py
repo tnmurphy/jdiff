@@ -23,45 +23,87 @@ not between lists.  e.g. if the top level items to compare are [ 1, 2,
 3 ] and [ 1, 2, 5 ] then it will see that they are not equal but not be
 able to show that 3 should be removed and 5 added to - i.e. it cannot
 gernerate diffs on lists.
+
+Additionally this diff is only for viewing - there's no mechanism for 
+"applying it" and because the format is somewhat unstable
 """
 
 import sys,os
 import json
 import re
+from collections import deque
 
 
-def dict_diff(jsona, jsonb, label="", indent=" "):
+class DiffOps:
+    """ diff operations """
+    def __init__(self, indent):
+        self.indent = indent
+        self.ops = deque()
+
+    def __len__(self):
+        return len(self.ops)
+
+    def op_l2r(self, key, value):
+        self.ops.append(('<', self.indent, key, value))
+
+    def op_r2l(self, key, value):
+        self.ops.append(('>', self.indent, key, value))
+
+    def add_sub_ops(self, key: str, subops: deque()):
+        self.ops.append(('D', self.indent, key, subops.ops))
+
+    @staticmethod
+    def ops_to_file(f, ops):
+
+        for op, indent, key, value in ops:
+            # Only show a label and the diff if there really is a diff
+            path_indent=" " * indent
+            if op == "<" or op == ">":
+                f.write(f"{op} {path_indent}{key}: {value}\n")
+            elif op == "D":
+                f.write(f"{op} {path_indent}{key}:\n")
+                DiffOps.ops_to_file(f, value)
+                
+    def to_file(self, f):
+        self.ops_to_file(f, self.ops)
+
+
+def dict_diff(jsona: dict, jsonb: dict, indent: int = 0) -> DiffOps:
     """ recursively find differences between two dictionaries"""
     a_keys = set(jsona.keys())
     b_keys = set(jsonb.keys())
 
-    output = ""
+    diffops = DiffOps(indent) 
     a_diff_keys = sorted(a_keys.difference(b_keys))
     if len(a_diff_keys) > 0:
         for k in a_diff_keys:
-            output += f">{indent}{k}: {jsona[k]}\n"
+            diffops.op_l2r(k, jsona[k])
 
     b_diff_keys = sorted(b_keys.difference(a_keys))
     if len(b_diff_keys) > 0:
         for k in b_diff_keys:
-            output += f"<{indent}{k}: {jsonb[k]}\n"
+            diffops.op_r2l(k, jsonb[k])
 
 
     intersection_keys = sorted(a_keys.intersection(b_keys))
     for k in intersection_keys:
         t = type(jsona[k])
         if isinstance(jsona[k], dict):
-            dict_diff(jsona[k], jsonb[k], k, indent + "  ")
+            subops = dict_diff(jsona[k], jsonb[k], indent+4)
+            if len(subops) > 0:
+                diffops.add_sub_ops(k, subops)
+
         elif jsona[k] != jsonb[k]:
-            output += f"-{indent}{k}: {jsona[k]}\n"
-            output += f"+{indent}{k}: {jsonb[k]}\n"
+            diffops.op_l2r((k, jsona[k]))
+            diffops.op_r2l((k, jsonb[k]))
 
-    # Only show a label and the diff if there really is a diff
-    if len(output) > 0:
-        path_indent=(" " * (len(indent)-1)) + "-"
-        print(f"{path_indent}{label}")
-        sys.stdout.write(output)
+    return diffops
 
+    
+def stdout_diff(jsona: dict, jsonb: dict):
+    ops = dict_diff(jsona, jsonb)
+
+    ops.to_file(sys.stdout)
 
 def file_diff(files):
     """Diff json files - takes a list of filenames as the parameter"""
@@ -76,7 +118,7 @@ def file_diff(files):
                 sys.exit(1)
 
     for fileb in json_items[1:]:
-        dict_diff(json_items[0],fileb)
+        stdout_diff(json_items[0],fileb)
 
 def line_diff():
     """Find first bit of json in one line, diff all successive ones to it"""
@@ -94,7 +136,7 @@ def line_diff():
 
                 jsona = json.loads(jsona_s)
                 jsonb = json.loads(jsonb_s)
-                dict_diff(jsona, jsonb)
+                stdout_diff(jsona, jsonb)
 
 
 if __name__ == "__main__":
